@@ -12,6 +12,7 @@ import {
 import { SendBulkMessageDto } from './dto/bulk-message.dto';
 import { SessionService } from '../session/session.service';
 import { IWhatsAppEngine } from '../../engine/interfaces/whatsapp-engine.interface';
+import { bulkMessageDefaultDelayMs, bulkMessageRandomJitterMs } from '../../config/anti-ban';
 
 // Type definitions for bulk message content
 interface BulkMessageContent {
@@ -69,7 +70,7 @@ export class BulkMessageService implements OnApplicationBootstrap {
     }
 
     const options = {
-      delayBetweenMessages: dto.options?.delayBetweenMessages ?? 3000,
+      delayBetweenMessages: dto.options?.delayBetweenMessages ?? bulkMessageDefaultDelayMs(),
       randomizeDelay: dto.options?.randomizeDelay ?? true,
       stopOnError: dto.options?.stopOnError ?? false,
     };
@@ -272,7 +273,7 @@ export class BulkMessageService implements OnApplicationBootstrap {
     return processValue(content) as BulkMessageContent;
   }
 
-  private sendMessage(
+  private async sendMessage(
     engine: IWhatsAppEngine,
     chatId: string,
     type: string,
@@ -280,6 +281,7 @@ export class BulkMessageService implements OnApplicationBootstrap {
   ): Promise<{ id: string }> {
     switch (type) {
       case 'text':
+        await this.simulateTypingForText(engine, chatId, content.text || '');
         return engine.sendTextMessage(chatId, content.text || '');
       case 'image':
         return engine.sendImageMessage(chatId, {
@@ -310,10 +312,29 @@ export class BulkMessageService implements OnApplicationBootstrap {
     }
   }
 
+  private async simulateTypingForText(engine: IWhatsAppEngine, chatId: string, text: string): Promise<void> {
+    if (process.env.SIMULATE_TYPING === 'false') return;
+    try {
+      await engine.sendChatState(chatId, 'typing');
+      const maxMs = Number(process.env.SIMULATE_TYPING_MAX_MS) || 8000;
+      const planned = Math.min(maxMs, 500 + text.length * 45);
+      const jittered = Math.round(planned * (0.85 + Math.random() * 0.3));
+      await this.sleep(jittered);
+    } catch {
+      // best-effort
+    } finally {
+      try {
+        await engine.sendChatState(chatId, 'paused');
+      } catch {
+        // best-effort
+      }
+    }
+  }
+
   private calculateDelay(options: { delayBetweenMessages: number; randomizeDelay: boolean }): number {
     let delay = options.delayBetweenMessages;
     if (options.randomizeDelay) {
-      delay += Math.random() * 2000; // Add 0-2 seconds random
+      delay += Math.random() * bulkMessageRandomJitterMs();
     }
     return delay;
   }

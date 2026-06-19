@@ -292,7 +292,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     this.reconnectStates.set(id, {
       attempts: 0,
       timer: null,
-      maxAttempts: config?.maxReconnectAttempts ?? 5,
+      maxAttempts: config?.maxReconnectAttempts ?? 30,
       baseDelay: config?.reconnectBaseDelay ?? 5000,
     });
 
@@ -612,6 +612,17 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
 
         void this.updateStatus(id, SessionStatus.DISCONNECTED);
 
+        // Each engine disconnect is a fresh outage — reset the reconnect budget so
+        // repeated 'disconnected' events during one network blip don't exhaust attempts.
+        const reconnectState = this.reconnectStates.get(id);
+        if (reconnectState) {
+          reconnectState.attempts = 0;
+          if (reconnectState.timer) {
+            clearTimeout(reconnectState.timer);
+            reconnectState.timer = null;
+          }
+        }
+
         // Attempt to reconnect
         this.scheduleReconnect(id, session);
       },
@@ -668,21 +679,26 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       return;
     }
 
+    // Debounce: only one reconnect timer per session at a time.
+    if (state.timer) {
+      return;
+    }
+
     // Exponential backoff: baseDelay * 2^attempts (with jitter)
     const delay = state.baseDelay * Math.pow(2, state.attempts) + Math.random() * 1000;
-    state.attempts++;
 
     this.logger.log(
-      `Scheduling reconnect attempt ${state.attempts}/${state.maxAttempts} in ${Math.round(delay / 1000)}s`,
+      `Scheduling reconnect attempt ${state.attempts + 1}/${state.maxAttempts} in ${Math.round(delay / 1000)}s`,
       {
         sessionId: id,
-        attempt: state.attempts,
+        attempt: state.attempts + 1,
         delayMs: delay,
         action: 'reconnect_scheduled',
       },
     );
 
     state.timer = setTimeout(() => {
+      state.timer = null;
       void this.executeReconnect(id, session, state);
     }, delay);
   }
@@ -692,6 +708,18 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     if (this.stoppingSessions.has(id)) {
       return;
     }
+
+    if (state.attempts >= state.maxAttempts) {
+      this.logger.error(`Max reconnect attempts reached for session: ${session.name}`, undefined, {
+        sessionId: id,
+        attempts: state.attempts,
+        action: 'reconnect_failed',
+      });
+      return;
+    }
+
+    state.attempts++;
+
     try {
       // Clean up old engine
       const oldEngine = this.engines.get(id);

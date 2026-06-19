@@ -580,12 +580,18 @@ export class MessageService {
     if (process.env.SIMULATE_TYPING === 'false') return;
     try {
       await engine.sendChatState(chatId, 'typing');
-      const maxMs = Number(process.env.SIMULATE_TYPING_MAX_MS) || 5000;
+      const maxMs = Number(process.env.SIMULATE_TYPING_MAX_MS) || 8000;
       const planned = Math.min(maxMs, 500 + text.length * 45);
       const jittered = Math.round(planned * (0.85 + Math.random() * 0.3)); // ±15% so it isn't metronomic
       await new Promise(resolve => setTimeout(resolve, jittered));
     } catch (error) {
       this.logger.warn(`simulateTyping skipped: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      try {
+        await engine.sendChatState(chatId, 'paused');
+      } catch {
+        // best-effort presence cleanup
+      }
     }
   }
 

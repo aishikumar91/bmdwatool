@@ -61,6 +61,7 @@
     "templates": "Templates",
     "apiKeys": "API 金鑰",
     "messageTester": "訊息測試器",
+    "phoneNumberGenerator": "號碼生成器",
     "infrastructure": "基礎架構",
     "plugins": "外掛",
     "logs": "記錄"

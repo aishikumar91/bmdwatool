@@ -19,22 +19,22 @@
   --radius: 10px;
 }
 
-/* Dark Mode */
+/* Dark Mode — pure black (no slate/blue tint) */
 [data-theme='dark'] {
   /* Make native controls (select option popups, scrollbars, date pickers) follow the EXPLICIT
      app theme, not just the OS preference — otherwise toggling dark while the OS is light left
      native dropdowns rendered in the light scheme (#249). */
   color-scheme: dark;
-  --bg-light: #0f172a; /* Slate 900 */
-  --bg-white: #1e293b; /* Slate 800 */
-  --bg-card: #1e293b;
-  --text-primary: #f1f5f9; /* Slate 100 */
-  --text-secondary: #cbd5e1; /* Slate 300 */
-  --text-muted: #64748b; /* Slate 500 */
-  --border: #334155; /* Slate 700 */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+  --bg-light: #000000;
+  --bg-white: #0a0a0a;
+  --bg-card: #0a0a0a;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a3a3a3;
+  --text-muted: #737373;
+  --border: #1f1f1f;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.6), 0 4px 6px -4px rgb(0 0 0 / 0.6);
 }
 
 /* Explicit light toggle: keep native controls light even if the OS prefers dark. */
@@ -49,16 +49,16 @@
        The Login screen never sets data-theme, so it relies solely on this block — without an
        explicit color-scheme the popup rendered light, leaving the light option text illegible (#249). */
     color-scheme: dark;
-    --bg-light: #0f172a;
-    --bg-white: #1e293b;
-    --bg-card: #1e293b;
-    --text-primary: #f1f5f9;
-    --text-secondary: #cbd5e1;
-    --text-muted: #64748b;
-    --border: #334155;
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+    --bg-light: #000000;
+    --bg-white: #0a0a0a;
+    --bg-card: #0a0a0a;
+    --text-primary: #f5f5f5;
+    --text-secondary: #a3a3a3;
+    --text-muted: #737373;
+    --border: #1f1f1f;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.6), 0 4px 6px -4px rgb(0 0 0 / 0.6);
   }
 }
 

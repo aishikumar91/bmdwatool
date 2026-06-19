@@ -33,6 +33,7 @@ import {
   ReactionEvent,
 } from '../interfaces/whatsapp-engine.interface';
 import { createLogger } from '../../common/services/logger.service';
+import { numberCheckJitterMs, numberCheckMinDelayMs } from '../../config/anti-ban';
 import { EngineNotReadyError } from '../../common/errors/engine-not-ready.error';
 import { assertSafeFetchUrl } from '../../common/security/ssrf-guard';
 import {
@@ -154,6 +155,12 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   private phoneNumber: string | null = null;
   private pushName: string | null = null;
   private callbacks: EngineEventCallbacks = {};
+  /** Serializes getNumberId calls — concurrent Puppeteer evaluate calls detach the WA Web frame. */
+  private numberCheckChain: Promise<unknown> = Promise.resolve();
+  private lastNumberCheckAt = 0;
+
+  private static readonly NUMBER_CHECK_RETRYABLE =
+    /detached Frame|Evaluation failed|Target closed|Protocol error|Execution context was destroyed/i;
 
   constructor(private readonly config: WhatsAppWebJsConfig) {
     super();
@@ -547,9 +554,67 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   }
 
   async getNumberId(number: string): Promise<string | null> {
+    const normalized = number.replace(/\D/g, '');
+    if (!normalized) {
+      return null;
+    }
+
+    return this.withNumberCheckLock(() => this.getNumberIdInternal(normalized));
+  }
+
+  private withNumberCheckLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.numberCheckChain.then(fn);
+    this.numberCheckChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private handleBrokenBrowser(reason: string): void {
+    if (this.status === EngineStatus.READY || this.status === EngineStatus.INITIALIZING) {
+      this.logger.warn(`Browser session broken, signaling disconnect: ${reason}`);
+      this.setStatus(EngineStatus.DISCONNECTED);
+      this.callbacks.onDisconnected?.(reason);
+    }
+  }
+
+  private async enforceNumberCheckPacing(): Promise<void> {
+    const minGap = numberCheckMinDelayMs();
+    const jitter = numberCheckJitterMs();
+    const required = minGap + (jitter > 0 ? Math.random() * jitter : 0);
+    const elapsed = Date.now() - this.lastNumberCheckAt;
+    if (this.lastNumberCheckAt > 0 && elapsed < required) {
+      await new Promise(resolve => setTimeout(resolve, required - elapsed));
+    }
+    this.lastNumberCheckAt = Date.now();
+  }
+
+  private async getNumberIdInternal(normalized: string): Promise<string | null> {
     this.ensureReady();
-    const numberId = await this.client!.getNumberId(number);
-    return numberId?._serialized ?? null;
+    await this.enforceNumberCheckPacing();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const numberId = await this.client!.getNumberId(normalized);
+        return numberId?._serialized ?? null;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const retryable = WhatsAppWebJsAdapter.NUMBER_CHECK_RETRYABLE.test(message);
+        if (retryable && attempt < 2) {
+          this.logger.warn(`getNumberId retry ${attempt + 1}/2 for ${normalized}: ${message}`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+          continue;
+        }
+        this.logger.warn(`getNumberId failed for ${normalized}`, message);
+        if (retryable) {
+          this.handleBrokenBrowser(message);
+          throw new EngineNotReadyError(message);
+        }
+        throw error;
+      }
+    }
+
+    return null;
   }
 
   async checkNumberExists(number: string): Promise<boolean> {

@@ -13,6 +13,12 @@ import {
 } from '../hooks/queries';
 import { PageHeader } from '../components/PageHeader';
 import { copyToClipboard } from '../utils/clipboard';
+import {
+  loadTemplatePairings,
+  saveTemplatePairing,
+  type TemplateScope,
+  TEMPLATE_SCOPE_OPTIONS,
+} from '../utils/templatePairings';
 import './Templates.css';
 
 type TemplateForm = {
@@ -61,6 +67,7 @@ export function Templates() {
   const [deleteTarget, setDeleteTarget] = useState<MessageTemplate | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [previewValues, setPreviewValues] = useState<Record<string, string>>({});
+  const [pairingScopes, setPairingScopes] = useState<Record<string, TemplateScope>>({});
 
   const { data: templates = [], isLoading: loadingTemplates } = useTemplatesQuery(selectedSessionId, !!selectedSessionId);
   const createMutation = useCreateTemplateMutation();
@@ -77,6 +84,15 @@ export function Templates() {
       setSelectedSessionId(sessions[0].id);
     }
   }, [selectedSessionId, sessions]);
+
+  useEffect(() => {
+    if (!selectedSessionId) return;
+    const map: Record<string, TemplateScope> = {};
+    for (const p of loadTemplatePairings().filter(p => p.sessionId === selectedSessionId)) {
+      map[p.templateId] = p.scope;
+    }
+    setPairingScopes(map);
+  }, [selectedSessionId, templates.length]);
 
   useEffect(() => {
     if (!toast) return;
@@ -109,6 +125,18 @@ export function Templates() {
       footer: template.footer || '',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handlePairTemplate = (template: MessageTemplate, scope: TemplateScope) => {
+    if (!selectedSessionId || !canWrite) return;
+    saveTemplatePairing({
+      templateId: template.id,
+      templateName: template.name,
+      sessionId: selectedSessionId,
+      scope,
+    });
+    setPairingScopes(prev => ({ ...prev, [template.id]: scope }));
+    setToast({ type: 'success', message: t('templates.pairingSaved') });
   };
 
   const handleSave = async () => {
@@ -344,6 +372,21 @@ export function Templates() {
                             {templatePlaceholders.map(key => (
                               <span key={key}>{`{{${key}}}`}</span>
                             ))}
+                          </div>
+                        )}
+                        {canWrite && (
+                          <div className="template-pairing-row">
+                            <label>{t('templates.pairRegion')}</label>
+                            <select
+                              value={pairingScopes[template.id] ?? 'all'}
+                              onChange={e => handlePairTemplate(template, e.target.value as TemplateScope)}
+                            >
+                              {TEMPLATE_SCOPE_OPTIONS.map(scope => (
+                                <option key={scope} value={scope}>
+                                  {t(`templates.scopes.${scope}`)}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         )}
                       </div>

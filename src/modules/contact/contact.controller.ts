@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Delete, Param, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Param,
+  HttpCode,
+  HttpStatus,
+  BadRequestException,
+  HttpException,
+  ConflictException,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { ContactService } from './contact.service';
 
@@ -20,6 +31,65 @@ export class ContactController {
     return this.contactService.getContacts(sessionId);
   }
 
+  @Get('check/:number')
+  @ApiOperation({ summary: 'Check if a phone number exists on WhatsApp' })
+  @ApiParam({ name: 'sessionId', description: 'Session ID' })
+  @ApiParam({ name: 'number', description: 'Phone number to check (e.g., 628123456789)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Number existence check result',
+  })
+  async checkNumber(@Param('sessionId') sessionId: string, @Param('number') number: string) {
+    const digits = number.replace(/\D/g, '');
+    if (!digits) {
+      throw new BadRequestException('Phone number must contain digits');
+    }
+
+    try {
+      const whatsappId = await this.contactService.getNumberId(sessionId, digits);
+      return {
+        number: digits,
+        exists: whatsappId !== null,
+        whatsappId,
+      };
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        const response = error.getResponse();
+        const rawMessage =
+          typeof response === 'string'
+            ? response
+            : (response as { message?: string | string[] }).message;
+        const message = Array.isArray(rawMessage) ? rawMessage[0] : rawMessage ?? error.message;
+
+        return {
+          number: digits,
+          exists: false,
+          whatsappId: null,
+          error: message,
+          retryable: true,
+          sessionNotReady: true,
+        };
+      }
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      const message = error instanceof Error ? error.message : 'Number check failed';
+      const retryable = /detached Frame|Evaluation failed|Target closed|Protocol error|Execution context was destroyed|not ready|not connected/i.test(
+        message,
+      );
+
+      return {
+        number: digits,
+        exists: false,
+        whatsappId: null,
+        error: message,
+        retryable,
+      };
+    }
+  }
+
   @Get(':contactId')
   @ApiOperation({ summary: 'Get a specific contact by ID' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
@@ -31,25 +101,6 @@ export class ContactController {
   @ApiResponse({ status: 404, description: 'Contact not found' })
   async findOne(@Param('sessionId') sessionId: string, @Param('contactId') contactId: string) {
     return this.contactService.getContactById(sessionId, contactId);
-  }
-
-  @Get('check/:number')
-  @ApiOperation({ summary: 'Check if a phone number exists on WhatsApp' })
-  @ApiParam({ name: 'sessionId', description: 'Session ID' })
-  @ApiParam({ name: 'number', description: 'Phone number to check (e.g., 628123456789)' })
-  @ApiResponse({
-    status: 200,
-    description: 'Number existence check result',
-  })
-  async checkNumber(@Param('sessionId') sessionId: string, @Param('number') number: string) {
-    // The engine returns the canonical chat id in its native format; we don't build the JID here
-    // (decoupled from the whatsapp-web.js `@c.us` scheme).
-    const whatsappId = await this.contactService.getNumberId(sessionId, number);
-    return {
-      number,
-      exists: whatsappId !== null,
-      whatsappId,
-    };
   }
 
   // ========== Gap Quick Wins: Profile Picture, Block/Unblock ==========

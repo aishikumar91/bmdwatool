@@ -364,6 +364,37 @@
   }
 }
 
+.template-card-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.template-pairing-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.template-pairing-row label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.template-pairing-row select {
+  flex: 1;
+  min-width: 140px;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  background: var(--bg-white);
+}
+
 @media (max-width: 768px) {
   .templates-page {
     padding: 1rem;

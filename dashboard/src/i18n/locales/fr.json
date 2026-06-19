@@ -61,6 +61,7 @@
     "templates": "Templates",
     "apiKeys": "Clés API",
     "messageTester": "Testeur de messages",
+    "phoneNumberGenerator": "Générateur de numéros",
     "infrastructure": "Infrastructure",
     "plugins": "Plugins",
     "logs": "Journaux"

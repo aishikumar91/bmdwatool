@@ -187,7 +187,8 @@
 }
 
 .response-json {
-  background: #1E293B;
+  background: var(--bg-white);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem;
   overflow-x: auto;
@@ -195,7 +196,7 @@
 
 .response-json pre {
   margin: 0;
-  color: #E2E8F0;
+  color: var(--text-primary);
   font-size: 0.8125rem;
   font-family: 'JetBrains Mono', monospace;
   white-space: pre-wrap;

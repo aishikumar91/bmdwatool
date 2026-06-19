@@ -18,6 +18,9 @@ const Templates = lazy(() => import('./pages/Templates').then(m => ({ default: m
 const Logs = lazy(() => import('./pages/Logs').then(m => ({ default: m.Logs })));
 const ApiKeys = lazy(() => import('./pages/ApiKeys').then(m => ({ default: m.ApiKeys })));
 const MessageTester = lazy(() => import('./pages/MessageTester').then(m => ({ default: m.MessageTester })));
+const PhoneNumberGenerator = lazy(() =>
+  import('./pages/PhoneNumberGenerator').then(m => ({ default: m.PhoneNumberGenerator })),
+);
 const Infrastructure = lazy(() => import('./pages/Infrastructure').then(m => ({ default: m.Infrastructure })));
 const Plugins = lazy(() => import('./pages/Plugins'));
 
@@ -25,7 +28,15 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
-      retry: 1,
+      retry: (failureCount, error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        const isGateway = /502|503|504|bad gateway|fetch failed|network error/i.test(message);
+        if (isGateway) {
+          return failureCount < 4;
+        }
+        return failureCount < 1;
+      },
+      retryDelay: attemptIndex => Math.min(2000 * 2 ** attemptIndex, 30_000),
       refetchOnWindowFocus: true,
     },
   },
@@ -110,6 +121,7 @@ function AppContent() {
             {role === 'admin' && <Route path="api-keys" element={<ApiKeys />} />}
             <Route path="logs" element={<Logs />} />
             <Route path="message-tester" element={<MessageTester />} />
+            <Route path="number-generator" element={<PhoneNumberGenerator />} />
             <Route path="infrastructure" element={<Infrastructure />} />
             {role === 'admin' && <Route path="plugins" element={<Plugins />} />}
             <Route path="*" element={<Navigate to="/" replace />} />

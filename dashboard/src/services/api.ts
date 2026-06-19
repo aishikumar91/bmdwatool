@@ -253,7 +253,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...options.headers,
   };
 
-  const response = await fetch(url, { ...options, headers });
+  let response: Response;
+  try {
+    response = await fetch(url, { ...options, headers });
+  } catch (error) {
+    throw new Error(`Network error: ${error instanceof Error ? error.message : 'fetch failed'}`);
+  }
 
   if (response.status === 401) {
     // The stored API key is invalid/expired/revoked — clear it and return to login
@@ -278,10 +283,6 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   return response.json();
 }
-
-// =============================================================================
-// Session API
-// =============================================================================
 
 export const sessionApi = {
   list: () => request<Session[]>('/sessions'),
@@ -308,6 +309,103 @@ export const sessionApi = {
     request<{ messages: ChatMessage[]; total: number }>(
       `/sessions/${id}/messages?chatId=${encodeURIComponent(chatId)}&limit=${limit}`,
     ),
+};
+
+// =============================================================================
+// Contact API
+// =============================================================================
+
+export interface NumberCheckResult {
+  number: string;
+  exists: boolean;
+  whatsappId: string | null;
+  error?: string;
+  retryable?: boolean;
+  sessionNotReady?: boolean;
+}
+
+export const contactApi = {
+  checkNumber: (sessionId: string, number: string) =>
+    request<NumberCheckResult>(`/sessions/${sessionId}/contacts/check/${encodeURIComponent(number)}`),
+};
+
+// =============================================================================
+// Validated Numbers Vault API (server-persisted)
+// =============================================================================
+
+export interface ValidatedNumberPayload {
+  e164: string;
+  whatsappId: string;
+  countryCode: string;
+  countryName: string;
+  flag: string;
+  dialCode: string;
+  nationalNumber: string;
+  verifiedAt: string;
+}
+
+export interface CountryVaultPayload {
+  countryCode: string;
+  countryName: string;
+  flag: string;
+  numbers: ValidatedNumberPayload[];
+}
+
+export const validatedNumberApi = {
+  list: () => request<{ countries: CountryVaultPayload[]; total: number }>('/validated-numbers'),
+  save: (number: ValidatedNumberPayload) =>
+    request<{ e164: string; whatsappId: string; countryCode: string; verifiedAt: string }>('/validated-numbers', {
+      method: 'POST',
+      body: JSON.stringify(number),
+    }),
+  saveBulk: (numbers: ValidatedNumberPayload[]) =>
+    request<{ saved: number }>('/validated-numbers/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ numbers }),
+    }),
+  removeByE164: (e164: string) => {
+    const digits = e164.replace(/\D/g, '');
+    return request<{ removed: boolean }>(`/validated-numbers/e164/${encodeURIComponent(digits)}`, {
+      method: 'DELETE',
+    });
+  },
+  removeCountry: (countryCode: string) =>
+    request<{ removed: number }>(`/validated-numbers/country/${encodeURIComponent(countryCode)}`, {
+      method: 'DELETE',
+    }),
+  clearAll: () =>
+    request<{ cleared: boolean }>('/validated-numbers', {
+      method: 'DELETE',
+    }),
+};
+
+// =============================================================================
+// Group API
+// =============================================================================
+
+export interface GroupInfo {
+  id: string;
+  name: string;
+  participantsCount?: number;
+}
+
+export const groupApi = {
+  list: (sessionId: string) => request<GroupInfo[]>(`/sessions/${sessionId}/groups`),
+  create: (sessionId: string, data: { name: string; participants: string[] }) =>
+    request<GroupInfo>(`/sessions/${sessionId}/groups`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  addParticipants: (sessionId: string, groupId: string, participants: string[]) =>
+    request<{ success: boolean }>(`/sessions/${sessionId}/groups/${encodeURIComponent(groupId)}/participants`, {
+      method: 'POST',
+      body: JSON.stringify({ participants }),
+    }),
+  sendGroupMessage: (sessionId: string, groupId: string, text: string) =>
+    request<MessageResponse>(`/sessions/${sessionId}/messages/send-text`, {
+      method: 'POST',
+      body: JSON.stringify({ chatId: groupId, text }),
+    }),
 };
 
 // =============================================================================
@@ -452,7 +550,12 @@ export const messageApi = {
     }),
   sendTemplate: (
     sessionId: string,
-    data: { chatId: string; templateId?: string; templateName?: string; variables?: Record<string, string> },
+    data: {
+      chatId: string;
+      templateId?: string;
+      templateName?: string;
+      vars?: Record<string, string>;
+    },
   ) =>
     request<MessageResponse>(`/sessions/${sessionId}/messages/send-template`, {
       method: 'POST',

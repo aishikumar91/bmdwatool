@@ -26,6 +26,7 @@ import { StatsModule } from './modules/stats/stats.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { StatusModule } from './modules/status/status.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
+import { ValidatedNumberModule } from './modules/validated-number/validated-number.module';
 import { HooksModule } from './core/hooks';
 import { PluginsModule } from './core/plugins';
 import { PluginsApiModule } from './modules/plugins/plugins.module';
@@ -89,6 +90,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
             __dirname + '/modules/webhook/**/*.entity{.ts,.js}',
             __dirname + '/modules/message/**/*.entity{.ts,.js}',
             __dirname + '/modules/template/**/*.entity{.ts,.js}',
+            __dirname + '/modules/validated-number/**/*.entity{.ts,.js}',
           ],
           migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
           logging: configService.get<boolean>('dataDatabase.logging', false),
@@ -186,6 +188,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
     StatusModule, // Phase 3: Status/Stories API
     CatalogModule, // Phase 3: Catalog API (WhatsApp Business)
     PluginsApiModule, // Phase 5: Plugins API
+    ValidatedNumberModule,
   ],
 })
 export class AppModule {}

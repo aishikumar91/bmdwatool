@@ -1,6 +1,6 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MessageSquare, Send, Webhook, Activity, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
+import { MessageSquare, Send, Webhook, Activity, ArrowUpRight, ArrowDownRight, Loader2, Zap, Globe2, FileText } from 'lucide-react';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useSessionsQuery, useSessionStatsQuery, useWebhooksQuery, useStopSessionMutation } from '../hooks/queries';
 import { PageHeader } from '../components/PageHeader';
@@ -86,6 +86,42 @@ export function Dashboard() {
           </span>
         }
       />
+
+      <section className="automation-quick-section">
+        <div className="section-header">
+          <div>
+            <h2>
+              <Zap size={20} />
+              {t('dashboard.automation.title')}
+            </h2>
+            <p className="section-subtitle">{t('dashboard.automation.subtitle')}</p>
+          </div>
+          <Link to="/templates" className="btn-sm automation-link-btn">
+            <FileText size={14} />
+            {t('dashboard.automation.templates')}
+          </Link>
+        </div>
+        <div className="automation-quick-grid">
+          {(
+            [
+              { scope: 'europe', icon: Globe2, label: t('dashboard.automation.europe') },
+              { scope: 'asia', icon: Globe2, label: t('dashboard.automation.asia') },
+              { scope: 'other', icon: Globe2, label: t('dashboard.automation.other') },
+              { scope: 'all', icon: Globe2, label: t('dashboard.automation.all') },
+            ] as const
+          ).map(item => (
+            <Link
+              key={item.scope}
+              to={`/number-generator?scope=${item.scope}&stealth=1`}
+              className="automation-quick-card"
+            >
+              <item.icon size={22} />
+              <span>{item.label}</span>
+              <small>{t('dashboard.automation.cardHint')}</small>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <div className="stats-grid">
         {statsCards.map(({ label, value, icon: Icon, trend, trendUp }) => (
