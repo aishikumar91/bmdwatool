@@ -1,0 +1,41 @@
+.app-logo {
+  display: block;
+  object-fit: contain;
+  object-position: left center;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.app-logo--sidebar {
+  width: 100%;
+  max-width: 188px;
+  height: auto;
+  max-height: 36px;
+}
+
+.app-logo--sidebar-collapsed {
+  width: 40px;
+  height: 28px;
+  object-fit: cover;
+  object-position: left center;
+}
+
+.app-logo--mobile {
+  width: auto;
+  max-width: 140px;
+  height: 28px;
+}
+
+.app-logo--login {
+  width: min(100%, 280px);
+  height: auto;
+  max-height: 72px;
+  margin: 0 auto;
+}
+
+@media (max-width: 480px) {
+  .app-logo--login {
+    max-width: 240px;
+    max-height: 56px;
+  }
+}

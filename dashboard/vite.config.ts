@@ -21,16 +21,29 @@ export default defineConfig({
   },
   server: {
     port: 2886,
+    strictPort: false,
+    host: '127.0.0.1',
     proxy: {
       '/api': {
-        target: 'http://localhost:2785',
+        target: 'http://127.0.0.1:2785',
         changeOrigin: true,
         secure: false,
+        configure: proxy => {
+          proxy.on('error', (_err, _req, res) => {
+            if (res && 'writeHead' in res && !res.headersSent) {
+              res.writeHead(502, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  message:
+                    'API not running on port 2785. Start it from the project root with: npm run dev',
+                }),
+              );
+            }
+          });
+        },
       },
-      // Proxy the WebSocket (socket.io) transport so the dashboard's real-time
-      // chats/sessions streams work against the dev backend.
       '/socket.io': {
-        target: 'http://localhost:2785',
+        target: 'http://127.0.0.1:2785',
         ws: true,
         changeOrigin: true,
       },

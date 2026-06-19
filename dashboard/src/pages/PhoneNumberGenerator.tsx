@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Shuffle,
@@ -13,9 +13,7 @@ import {
   RefreshCw,
   BarChart3,
   ShieldCheck,
-  FolderOpen,
-  ChevronDown,
-  ChevronRight,
+  FolderCheck,
   Send,
   Users,
   Loader2,
@@ -23,12 +21,12 @@ import {
   XCircle,
   AlertCircle,
   Pause,
-  Save,
   MessageSquare,
 } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useValidatedVault } from '../hooks/useValidatedVault';
 import { useRole } from '../hooks/useRole';
 import { useSessionsQuery, useTemplatesQuery } from '../hooks/queries';
 import { groupApi } from '../services/api';
@@ -49,14 +47,7 @@ import {
   type VerificationStatus,
 } from '../utils/phoneNumberGenerator';
 import {
-  fetchVaultCountries,
-  migrateLocalVaultToServer,
   persistValidatedNumbers,
-  removeValidatedNumberRemote,
-  clearCountryVaultRemote,
-  clearVaultRemote,
-  saveAllVaultToServer,
-  type CountryVault,
 } from '../utils/validatedNumbersStorage';
 import {
   chunkArray,
@@ -160,9 +151,9 @@ export function PhoneNumberGenerator() {
 
   const [autoGroupPermission, setAutoGroupPermission] = useState(() => loadAutoGroupPermission());
   const [groupCreateDelay, setGroupCreateDelay] = useState(() => loadGroupCreateDelay());
+  const [mobilePanel, setMobilePanel] = useState<'setup' | 'results'>('setup');
 
-  const [vault, setVault] = useState<CountryVault[]>([]);
-  const [expandedVault, setExpandedVault] = useState<Set<string>>(new Set());
+  const { vault, refreshVault, totalCount: totalVaultCount } = useValidatedVault();
 
   const [groupNamePrefix, setGroupNamePrefix] = useState('OpenWA Research');
   const [groupMessage, setGroupMessage] = useState('');
@@ -172,7 +163,6 @@ export function PhoneNumberGenerator() {
 
   const [broadcastDelay, setBroadcastDelay] = useState(() => loadBroadcastMessageDelay());
   const [isBroadcasting, setIsBroadcasting] = useState(false);
-  const [isSavingVault, setIsSavingVault] = useState(false);
   const [broadcastWaitingMessage, setBroadcastWaitingMessage] = useState<string | null>(null);
   const [broadcastCurrent, setBroadcastCurrent] = useState<string | null>(null);
   const [broadcastProgress, setBroadcastProgress] = useState({ done: 0, total: 0, sent: 0, failed: 0 });
@@ -197,18 +187,6 @@ export function PhoneNumberGenerator() {
       setSessionId(readySessions[0].id);
     }
   }, [readySessions, sessionId]);
-
-  const refreshVault = useCallback(async () => {
-    const countries = await fetchVaultCountries();
-    setVault(countries);
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      await migrateLocalVaultToServer();
-      await refreshVault();
-    })();
-  }, [refreshVault]);
 
   useEffect(() => {
     const queue = loadBroadcastQueue();
@@ -269,8 +247,6 @@ export function PhoneNumberGenerator() {
     const pending = results.filter(r => !r.verificationStatus || r.verificationStatus === 'pending').length;
     return { valid, invalid, pending, total: results.length };
   }, [results]);
-
-  const totalVaultCount = useMemo(() => vault.reduce((sum, v) => sum + v.numbers.length, 0), [vault]);
 
   const resumableBroadcast = useMemo(
     () => hasResumableBroadcast(savedBroadcastQueue),
@@ -603,15 +579,6 @@ export function PhoneNumberGenerator() {
     }
   };
 
-  const toggleVaultFolder = (code: string) => {
-    setExpandedVault(prev => {
-      const next = new Set(prev);
-      if (next.has(code)) next.delete(code);
-      else next.add(code);
-      return next;
-    });
-  };
-
   const getExportNumbers = (): GeneratedPhoneNumber[] => {
     if (selectedResultIds.size > 0) {
       return results.filter(r => selectedResultIds.has(r.id));
@@ -662,22 +629,6 @@ export function PhoneNumberGenerator() {
     setResults([]);
     setSelectedResultIds(new Set());
     setResultSearch('');
-  };
-
-  const handleSaveVaultToServer = async () => {
-    if (vault.length === 0) {
-      toast.warning(t('phoneNumberGenerator.noValidatedInVault'));
-      return;
-    }
-    setIsSavingVault(true);
-    try {
-      const count = await saveAllVaultToServer(vault);
-      toast.success(t('phoneNumberGenerator.vaultSavedTitle'), t('phoneNumberGenerator.vaultSavedDesc', { count }));
-    } catch (err) {
-      toast.error(t('phoneNumberGenerator.vaultSaveFailed'), err instanceof Error ? err.message : t('common.errorGeneric'));
-    } finally {
-      setIsSavingVault(false);
-    }
   };
 
   const runDirectBroadcast = async (queue: BroadcastQueueState, resume: boolean) => {
@@ -884,9 +835,7 @@ export function PhoneNumberGenerator() {
       if (automationAbortRef.current) return;
 
       setPipelineStep('save');
-      await refreshVault();
-      const latestVault = await fetchVaultCountries();
-      setVault(latestVault);
+      const latestVault = await refreshVault();
       if (automationAbortRef.current) return;
 
       setPipelineStep('broadcast');
@@ -1037,7 +986,42 @@ export function PhoneNumberGenerator() {
         permissionGranted={autoGroupPermission}
       />
 
-      <div className="generator-layout">
+      {totalVaultCount > 0 && (
+        <div className="vault-link-banner">
+          <FolderCheck size={22} />
+          <div className="vault-link-copy">
+            <strong>{t('phoneNumberGenerator.viewVerifiedBanner', { count: totalVaultCount })}</strong>
+            <p>{t('phoneNumberGenerator.viewVerifiedBannerDesc')}</p>
+          </div>
+          <Link to="/verified-numbers" className="btn-secondary vault-link-action">
+            {t('phoneNumberGenerator.openVerifiedFolder')}
+          </Link>
+        </div>
+      )}
+
+      <div className="generator-tabs" role="tablist" aria-label={t('phoneNumberGenerator.title')}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobilePanel === 'setup'}
+          className={mobilePanel === 'setup' ? 'active' : ''}
+          onClick={() => setMobilePanel('setup')}
+        >
+          {t('phoneNumberGenerator.panelSetup')}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobilePanel === 'results'}
+          className={mobilePanel === 'results' ? 'active' : ''}
+          onClick={() => setMobilePanel('results')}
+        >
+          {t('phoneNumberGenerator.panelResults')}
+          {results.length > 0 ? ` (${results.length})` : ''}
+        </button>
+      </div>
+
+      <div className={`generator-layout panel-${mobilePanel}`}>
         <aside className="generator-config">
           <div className="config-section">
             <h2>{t('phoneNumberGenerator.selectCountries')}</h2>
@@ -1463,324 +1447,217 @@ export function PhoneNumberGenerator() {
         </section>
       </div>
 
-      <section className="vault-section">
+      <section className="outreach-section">
         <div className="section-header">
           <div>
             <h2>
-              <FolderOpen size={20} />
-              {t('phoneNumberGenerator.validatedVault')}
+              <Send size={20} />
+              {t('phoneNumberGenerator.outreachTitle')}
             </h2>
-            <p>{t('phoneNumberGenerator.validatedVaultDesc')}</p>
+            <p>{t('phoneNumberGenerator.outreachDesc')}</p>
           </div>
-          <div className="section-actions">
-            <span className="vault-total">
+          {totalVaultCount > 0 && (
+            <Link to="/verified-numbers" className="btn-secondary">
+              <FolderCheck size={14} />
               {totalVaultCount} {t('phoneNumberGenerator.validatedTotal')}
-            </span>
-            {vault.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  disabled={isSavingVault}
-                  onClick={() => void handleSaveVaultToServer()}
-                >
-                  {isSavingVault ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  {t('phoneNumberGenerator.saveValidatedContacts')}
-                </button>
-                <button
-                  type="button"
-                  className="btn-danger"
-                  onClick={() => {
-                    void clearVaultRemote().then(() => {
-                      refreshVault();
-                      toast.success(t('phoneNumberGenerator.vaultCleared'));
-                    });
-                  }}
-                >
-                  <Trash2 size={14} />
-                  {t('phoneNumberGenerator.clearVault')}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {vault.length === 0 ? (
-          <div className="vault-empty">
-            <FolderOpen size={40} strokeWidth={1.25} />
-            <p>{t('phoneNumberGenerator.vaultEmpty')}</p>
-          </div>
-        ) : (
-          <div className="vault-folders">
-            {vault.map(folder => {
-              const expanded = expandedVault.has(folder.countryCode);
-              return (
-                <div key={folder.countryCode} className="vault-folder">
-                  <div className="vault-folder-header">
-                    <button
-                      type="button"
-                      className="vault-folder-toggle"
-                      onClick={() => toggleVaultFolder(folder.countryCode)}
-                    >
-                      {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                      <span className="vault-flag">{folder.flag}</span>
-                      <span className="vault-folder-name">{folder.countryName}</span>
-                      <span className="vault-folder-count">{folder.numbers.length}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn-sm folder-action"
-                      onClick={() => {
-                        void clearCountryVaultRemote(folder.countryCode).then(refreshVault);
-                      }}
-                      title={t('phoneNumberGenerator.clearFolder')}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                  {expanded && (
-                    <div className="vault-folder-body">
-                      {folder.numbers.map(n => (
-                        <div key={n.e164} className="vault-number-row">
-                          <code>{n.e164}</code>
-                          <code className="muted">{n.whatsappId}</code>
-                          <span className="vault-date">{new Date(n.verifiedAt).toLocaleDateString()}</span>
-                          <button
-                            type="button"
-                            className="icon-btn-sm"
-                            onClick={() => {
-                              void removeValidatedNumberRemote(folder.countryCode, n.e164).then(refreshVault);
-                            }}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section className="direct-broadcast-section">
-        <div className="section-header">
-          <div>
-            <h2>
-              <MessageSquare size={20} />
-              {t('phoneNumberGenerator.directBroadcast')}
-            </h2>
-            <p>{t('phoneNumberGenerator.directBroadcastDesc')}</p>
-          </div>
-        </div>
-
-        <div className="direct-broadcast-panel">
-          {resumableBroadcast && savedBroadcastQueue && broadcastQueueStats && (
-            <div className="broadcast-resume-banner">
-              <div>
-                <strong>{t('phoneNumberGenerator.broadcastResumeTitle')}</strong>
-                <p>
-                  {t('phoneNumberGenerator.broadcastResumeDesc', {
-                    pending: broadcastQueueStats.pending,
-                    sent: broadcastQueueStats.sent,
-                    total: broadcastQueueStats.total,
-                  })}
-                </p>
-              </div>
-              <div className="broadcast-resume-actions">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={handleClearBroadcastQueue}
-                  disabled={isBroadcasting}
-                >
-                  {t('phoneNumberGenerator.clearBroadcastQueue')}
-                </button>
-                <button
-                  type="button"
-                  className="btn-generate"
-                  onClick={() => void handleResumeDirectBroadcast()}
-                  disabled={isBroadcasting || !sessionId || !canWrite}
-                >
-                  {isBroadcasting ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                  {t('phoneNumberGenerator.resumeBroadcast')}
-                </button>
-              </div>
-            </div>
+            </Link>
           )}
+        </div>
 
-          <div className={`permission-card ${autoGroupPermission ? 'granted' : ''}`}>
-            <label className="checkbox-row permission-row">
-              <input
-                type="checkbox"
-                checked={autoGroupPermission}
-                onChange={e => handleAutoGroupPermission(e.target.checked)}
-              />
-              <div>
-                <strong>{t('phoneNumberGenerator.broadcastPermissionTitle')}</strong>
-                <p>{t('phoneNumberGenerator.broadcastPermissionDesc')}</p>
-              </div>
-            </label>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="broadcast-delay">{t('phoneNumberGenerator.broadcastMessageDelay')}</label>
-            <div className="count-control">
-              <input
-                id="broadcast-delay"
-                type="range"
-                min={1500}
-                max={30000}
-                step={500}
-                value={broadcastDelay}
-                onChange={e => {
-                  const ms = Number(e.target.value);
-                  setBroadcastDelay(ms);
-                  saveBroadcastMessageDelay(ms);
-                }}
-                disabled={isBroadcasting}
-              />
-              <span className="delay-value">{broadcastDelay}ms</span>
+        {resumableBroadcast && savedBroadcastQueue && broadcastQueueStats && (
+          <div className="broadcast-resume-banner">
+            <div>
+              <strong>{t('phoneNumberGenerator.broadcastResumeTitle')}</strong>
+              <p>
+                {t('phoneNumberGenerator.broadcastResumeDesc', {
+                  pending: broadcastQueueStats.pending,
+                  sent: broadcastQueueStats.sent,
+                  total: broadcastQueueStats.total,
+                })}
+              </p>
             </div>
-            <span className="hint">{t('phoneNumberGenerator.broadcastMessageDelayHint')}</span>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="direct-message">{t('phoneNumberGenerator.directMessage')}</label>
-            <textarea
-              id="direct-message"
-              value={directMessage}
-              onChange={e => setDirectMessage(e.target.value)}
-              placeholder={t('phoneNumberGenerator.directMessagePlaceholder')}
-              rows={4}
-              disabled={isBroadcasting}
-            />
-          </div>
-
-          {isBroadcasting && (
-            <div className="broadcast-progress-wrap">
-              <div className="verify-progress">
-                <div
-                  className="verify-progress-bar"
-                  style={{
-                    width: `${broadcastProgress.total ? (broadcastProgress.done / broadcastProgress.total) * 100 : 0}%`,
-                  }}
-                />
-                <span>
-                  {t('phoneNumberGenerator.broadcastProgress', {
-                    done: broadcastProgress.done,
-                    total: broadcastProgress.total,
-                    sent: broadcastProgress.sent,
-                    failed: broadcastProgress.failed,
-                  })}
-                </span>
-                {broadcastCurrent && <span className="verify-waiting-message">{broadcastCurrent}</span>}
-                {broadcastWaitingMessage && (
-                  <span className="verify-waiting-message">{broadcastWaitingMessage}</span>
-                )}
-              </div>
-              <button type="button" className="btn-secondary" onClick={handleCancelBroadcast}>
-                {t('phoneNumberGenerator.cancelBroadcast')}
+            <div className="broadcast-resume-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleClearBroadcastQueue}
+                disabled={isBroadcasting}
+              >
+                {t('phoneNumberGenerator.clearBroadcastQueue')}
+              </button>
+              <button
+                type="button"
+                className="btn-generate"
+                onClick={() => void handleResumeDirectBroadcast()}
+                disabled={isBroadcasting || !sessionId || !canWrite}
+              >
+                {isBroadcasting ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                {t('phoneNumberGenerator.resumeBroadcast')}
               </button>
             </div>
-          )}
-
-          <button
-            type="button"
-            className="btn-generate"
-            onClick={() => void handleStartDirectBroadcast()}
-            disabled={
-              isBroadcasting || isSendingGroups || !sessionId || !canWrite || vault.length === 0 || !autoGroupPermission
-            }
-          >
-            {isBroadcasting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-            {isBroadcasting ? t('phoneNumberGenerator.sendingDirect') : t('phoneNumberGenerator.startDirectBroadcast')}
-          </button>
-          <p className="hint research-note">{t('phoneNumberGenerator.directBroadcastNote')}</p>
-        </div>
-      </section>
-
-      <section className="group-broadcast-section">
-        <div className="section-header">
-          <div>
-            <h2>
-              <Users size={20} />
-              {t('phoneNumberGenerator.groupBroadcast')}
-            </h2>
-            <p>{t('phoneNumberGenerator.groupBroadcastDesc')}</p>
           </div>
-        </div>
+        )}
 
-        <div className="group-broadcast-panel">
-          <div className={`permission-card ${autoGroupPermission ? 'granted' : ''}`}>
-            <label className="checkbox-row permission-row">
-              <input
-                type="checkbox"
-                checked={autoGroupPermission}
-                onChange={e => handleAutoGroupPermission(e.target.checked)}
-              />
-              <div>
-                <strong>{t('phoneNumberGenerator.autoGroupPermissionTitle')}</strong>
-                <p>{t('phoneNumberGenerator.autoGroupPermissionDesc')}</p>
-              </div>
-            </label>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="group-delay">{t('phoneNumberGenerator.groupCreateDelay')}</label>
-            <div className="count-control">
-              <input
-                id="group-delay"
-                type="range"
-                min={1000}
-                max={15000}
-                step={500}
-                value={groupCreateDelay}
-                onChange={e => {
-                  const ms = Number(e.target.value);
-                  setGroupCreateDelay(ms);
-                  saveGroupCreateDelay(ms);
-                }}
-                disabled={isSendingGroups}
-              />
-              <span className="delay-value">{groupCreateDelay}ms</span>
-            </div>
-            <span className="hint">{t('phoneNumberGenerator.groupCreateDelayHint')}</span>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="group-prefix">{t('phoneNumberGenerator.groupNamePrefix')}</label>
+        <div className={`permission-card ${autoGroupPermission ? 'granted' : ''}`}>
+          <label className="checkbox-row permission-row">
             <input
-              id="group-prefix"
-              type="text"
-              value={groupNamePrefix}
-              onChange={e => setGroupNamePrefix(e.target.value)}
-              placeholder={t('phoneNumberGenerator.groupNamePlaceholder')}
+              type="checkbox"
+              checked={autoGroupPermission}
+              onChange={e => handleAutoGroupPermission(e.target.checked)}
             />
-          </div>
-          <div className="form-group">
-            <label htmlFor="group-message">{t('phoneNumberGenerator.groupMessage')}</label>
-            <textarea
-              id="group-message"
-              value={groupMessage}
-              onChange={e => setGroupMessage(e.target.value)}
-              placeholder={t('phoneNumberGenerator.groupMessagePlaceholder')}
-              rows={4}
-            />
-          </div>
-          {groupProgress && <p className="group-progress">{groupProgress}</p>}
-          <button
-            type="button"
-            className="btn-generate"
-            onClick={handleCreateGroupsAndSend}
-            disabled={isSendingGroups || !sessionId || !canWrite || vault.length === 0 || !autoGroupPermission}
-          >
-            {isSendingGroups ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-            {isSendingGroups ? t('phoneNumberGenerator.sendingGroups') : t('phoneNumberGenerator.createGroupsAndSend')}
-          </button>
-          <p className="hint research-note">{t('phoneNumberGenerator.researchNote')}</p>
+            <div>
+              <strong>{t('phoneNumberGenerator.broadcastPermissionTitle')}</strong>
+              <p>{t('phoneNumberGenerator.broadcastPermissionDesc')}</p>
+            </div>
+          </label>
+        </div>
+
+        <div className="outreach-grid">
+          <article className="outreach-card">
+            <h3>
+              <MessageSquare size={18} />
+              {t('phoneNumberGenerator.directBroadcast')}
+            </h3>
+            <p className="outreach-card-desc">{t('phoneNumberGenerator.directBroadcastDesc')}</p>
+
+            <div className="form-group">
+              <label htmlFor="broadcast-delay">{t('phoneNumberGenerator.broadcastMessageDelay')}</label>
+              <div className="count-control">
+                <input
+                  id="broadcast-delay"
+                  type="range"
+                  min={1500}
+                  max={30000}
+                  step={500}
+                  value={broadcastDelay}
+                  onChange={e => {
+                    const ms = Number(e.target.value);
+                    setBroadcastDelay(ms);
+                    saveBroadcastMessageDelay(ms);
+                  }}
+                  disabled={isBroadcasting}
+                />
+                <span className="delay-value">{broadcastDelay}ms</span>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="direct-message">{t('phoneNumberGenerator.directMessage')}</label>
+              <textarea
+                id="direct-message"
+                value={directMessage}
+                onChange={e => setDirectMessage(e.target.value)}
+                placeholder={t('phoneNumberGenerator.directMessagePlaceholder')}
+                rows={3}
+                disabled={isBroadcasting}
+              />
+            </div>
+
+            {isBroadcasting && (
+              <div className="broadcast-progress-wrap">
+                <div className="verify-progress">
+                  <div
+                    className="verify-progress-bar"
+                    style={{
+                      width: `${broadcastProgress.total ? (broadcastProgress.done / broadcastProgress.total) * 100 : 0}%`,
+                    }}
+                  />
+                  <span>
+                    {t('phoneNumberGenerator.broadcastProgress', {
+                      done: broadcastProgress.done,
+                      total: broadcastProgress.total,
+                      sent: broadcastProgress.sent,
+                      failed: broadcastProgress.failed,
+                    })}
+                  </span>
+                  {broadcastCurrent && <span className="verify-waiting-message">{broadcastCurrent}</span>}
+                  {broadcastWaitingMessage && (
+                    <span className="verify-waiting-message">{broadcastWaitingMessage}</span>
+                  )}
+                </div>
+                <button type="button" className="btn-secondary" onClick={handleCancelBroadcast}>
+                  {t('phoneNumberGenerator.cancelBroadcast')}
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="btn-generate"
+              onClick={() => void handleStartDirectBroadcast()}
+              disabled={
+                isBroadcasting || isSendingGroups || !sessionId || !canWrite || vault.length === 0 || !autoGroupPermission
+              }
+            >
+              {isBroadcasting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+              {isBroadcasting ? t('phoneNumberGenerator.sendingDirect') : t('phoneNumberGenerator.startDirectBroadcast')}
+            </button>
+            <p className="hint research-note">{t('phoneNumberGenerator.directBroadcastNote')}</p>
+          </article>
+
+          <article className="outreach-card">
+            <h3>
+              <Users size={18} />
+              {t('phoneNumberGenerator.groupBroadcast')}
+            </h3>
+            <p className="outreach-card-desc">{t('phoneNumberGenerator.groupBroadcastDesc')}</p>
+
+            <div className="form-group">
+              <label htmlFor="group-delay">{t('phoneNumberGenerator.groupCreateDelay')}</label>
+              <div className="count-control">
+                <input
+                  id="group-delay"
+                  type="range"
+                  min={1000}
+                  max={15000}
+                  step={500}
+                  value={groupCreateDelay}
+                  onChange={e => {
+                    const ms = Number(e.target.value);
+                    setGroupCreateDelay(ms);
+                    saveGroupCreateDelay(ms);
+                  }}
+                  disabled={isSendingGroups}
+                />
+                <span className="delay-value">{groupCreateDelay}ms</span>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="group-prefix">{t('phoneNumberGenerator.groupNamePrefix')}</label>
+              <input
+                id="group-prefix"
+                type="text"
+                value={groupNamePrefix}
+                onChange={e => setGroupNamePrefix(e.target.value)}
+                placeholder={t('phoneNumberGenerator.groupNamePlaceholder')}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="group-message">{t('phoneNumberGenerator.groupMessage')}</label>
+              <textarea
+                id="group-message"
+                value={groupMessage}
+                onChange={e => setGroupMessage(e.target.value)}
+                placeholder={t('phoneNumberGenerator.groupMessagePlaceholder')}
+                rows={3}
+              />
+            </div>
+
+            {groupProgress && <p className="group-progress">{groupProgress}</p>}
+
+            <button
+              type="button"
+              className="btn-generate"
+              onClick={handleCreateGroupsAndSend}
+              disabled={isSendingGroups || !sessionId || !canWrite || vault.length === 0 || !autoGroupPermission}
+            >
+              {isSendingGroups ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+              {isSendingGroups ? t('phoneNumberGenerator.sendingGroups') : t('phoneNumberGenerator.createGroupsAndSend')}
+            </button>
+            <p className="hint research-note">{t('phoneNumberGenerator.researchNote')}</p>
+          </article>
         </div>
       </section>
     </div>

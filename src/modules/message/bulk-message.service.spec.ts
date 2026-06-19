@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { BulkMessageService } from './bulk-message.service';
 import { MessageBatch, BatchStatus } from './entities/message-batch.entity';
 import { SessionService } from '../session/session.service';
+import { SessionHistoryCleanupService } from './session-history-cleanup.service';
 
 /** Regression lock: orphaned (restart-interrupted) PROCESSING batches are transitioned. */
 describe('BulkMessageService.onApplicationBootstrap', () => {
@@ -19,6 +20,10 @@ describe('BulkMessageService.onApplicationBootstrap', () => {
         BulkMessageService,
         { provide: getRepositoryToken(MessageBatch, 'data'), useValue: repo },
         { provide: SessionService, useValue: { getEngine: jest.fn() } },
+        {
+          provide: SessionHistoryCleanupService,
+          useValue: { shouldClearAfterBroadcast: () => false, clearSessionMessages: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get<BulkMessageService>(BulkMessageService);

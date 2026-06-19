@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "OpenWA",
+    "appName": "BMDWATOOL",
     "appSubtitle": "واجهة برمجة واتساب",
     "loading": "جارٍ التحميل...",
     "save": "حفظ",
@@ -62,6 +62,7 @@
     "apiKeys": "مفاتيح API",
     "messageTester": "اختبار الرسائل",
     "phoneNumberGenerator": "مولّد الأرقام",
+    "verifiedNumbers": "أرقامي الموثقة",
     "infrastructure": "البنية التحتية",
     "plugins": "الإضافات",
     "logs": "السجلات"

@@ -9,8 +9,28 @@
 // Previously VITE_API_URL was documented but never read, so the dashboard always called
 // same-origin '/api' and a split deployment failed with "Invalid API Key" (#91).
 // Exported so direct fetches (e.g. auth/validate in Login.tsx / App.tsx) honor VITE_API_URL
-// too — otherwise split-origin deployments break. Empty VITE_API_URL → '/api'.
-export const API_BASE_URL = `${(import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')}/api`;
+// too — otherwise split-origin deployments break.
+function resolveApiBaseUrl(): string {
+  const raw = (import.meta.env.VITE_API_URL ?? '').trim().replace(/\/+$/, '');
+  if (!raw) {
+    // Same-origin relative path — Vite dev proxy or reverse proxy in production.
+    return '/api';
+  }
+  if (raw.endsWith('/api')) {
+    return raw;
+  }
+  return `${raw}/api`;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
+
+function formatFetchError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (/failed to fetch|networkerror|load failed|ECONNREFUSED/i.test(msg)) {
+    return 'Cannot reach the API server. From the project folder run: npm run dev (waits for port 2785).';
+  }
+  return msg || 'Network error';
+}
 
 // =============================================================================
 // Types
@@ -257,7 +277,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   try {
     response = await fetch(url, { ...options, headers });
   } catch (error) {
-    throw new Error(`Network error: ${error instanceof Error ? error.message : 'fetch failed'}`);
+    throw new Error(formatFetchError(error));
   }
 
   if (response.status === 401) {
@@ -275,6 +295,43 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: response.statusText }));
     throw new Error(error.message || `HTTP ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json();
+}
+
+/** Public API calls (no stored API key, no 401 redirect) — used on the login page. */
+function parseApiErrorBody(body: unknown, fallback: string): string {
+  if (!body || typeof body !== 'object') return fallback;
+  const message = (body as { message?: string | string[] }).message;
+  if (Array.isArray(message)) return message.join(', ');
+  if (typeof message === 'string' && message.length > 0) return message;
+  return fallback;
+}
+
+async function publicRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  } catch (error) {
+    throw new Error(formatFetchError(error));
+  }
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(parseApiErrorBody(error, response.statusText || `HTTP ${response.status}`));
   }
 
   if (response.status === 204) {
@@ -453,6 +510,39 @@ export const templateApi = {
     }),
   delete: (sessionId: string, id: string) =>
     request<void>(`/sessions/${sessionId}/templates/${id}`, { method: 'DELETE' }),
+};
+
+// =============================================================================
+// Auth Bootstrap API (public — login page key generation)
+// =============================================================================
+
+export interface BootstrapKeyStatus {
+  allowed: boolean;
+  hasKeys: boolean;
+  hasKeyFile: boolean;
+  hint?: string;
+}
+
+export interface BootstrapKeyResult {
+  apiKey: string;
+  keyPrefix: string;
+  created: boolean;
+  recovered?: boolean;
+  message: string;
+}
+
+export const authBootstrapApi = {
+  status: () => publicRequest<BootstrapKeyStatus>('/auth/bootstrap-key'),
+  generate: (force = false) =>
+    publicRequest<BootstrapKeyResult>('/auth/bootstrap-key', {
+      method: 'POST',
+      body: JSON.stringify(force ? { force: true } : {}),
+    }),
+  validate: (apiKey: string) =>
+    publicRequest<{ valid: boolean; role?: string }>('/auth/validate', {
+      method: 'POST',
+      headers: { 'X-API-Key': apiKey.trim() },
+    }),
 };
 
 // =============================================================================

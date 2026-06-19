@@ -12,6 +12,7 @@ import {
   LogOut,
   Send,
   Hash,
+  FolderCheck,
   Server,
   Puzzle,
   Sun,
@@ -26,6 +27,7 @@ import {
 import { useTheme } from '../hooks/useTheme';
 import { type UserRole } from '../hooks/useRole';
 import { languageOptions, resolveSupportedLanguage, rtlLanguages, type SupportedLanguage } from '../i18n';
+import { AppLogo } from './AppLogo';
 import './Layout.css';
 
 interface LayoutProps {
@@ -42,6 +44,7 @@ const allNavItems = [
   { to: '/api-keys', icon: Key, key: 'apiKeys' as const, adminOnly: true },
   { to: '/message-tester', icon: Send, key: 'messageTester' as const, adminOnly: false },
   { to: '/number-generator', icon: Hash, key: 'phoneNumberGenerator' as const, adminOnly: false },
+  { to: '/verified-numbers', icon: FolderCheck, key: 'verifiedNumbers' as const, adminOnly: false },
   // Backend /infra/* is ADMIN-only; hide the nav item from non-admins (UX + defense-in-depth).
   { to: '/infrastructure', icon: Server, key: 'infrastructure' as const, adminOnly: true },
   { to: '/plugins', icon: Puzzle, key: 'plugins' as const, adminOnly: true },
@@ -124,8 +127,7 @@ export function Layout({ onLogout, userRole }: LayoutProps) {
             {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
           <div className="mobile-brand">
-            <img src="/openwa_logo.webp" alt="OpenWA" className="sidebar-logo" />
-            <span className="brand-name">{t('common.appName')}</span>
+            <AppLogo variant="mobile" />
           </div>
           <div style={{ width: 40 }} />
         </header>
@@ -137,12 +139,9 @@ export function Layout({ onLogout, userRole }: LayoutProps) {
         className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${isMobile ? 'mobile' : ''} ${isMobileOpen ? 'open' : ''}`}
       >
         <div className="sidebar-header">
-          <img src="/openwa_logo.webp" alt="OpenWA" className="sidebar-logo" />
+          <AppLogo variant={isCollapsed ? 'sidebar-collapsed' : 'sidebar'} />
           {!isCollapsed && (
-            <div className="sidebar-brand">
-              <span className="brand-name">{t('common.appName')}</span>
-              <span className="brand-subtitle">{t('common.appSubtitle')}</span>
-            </div>
+            <span className="brand-subtitle">{t('common.appSubtitle')}</span>
           )}
         </div>
 

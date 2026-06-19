@@ -1,16 +1,20 @@
-import { Controller, Post, Headers, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Headers, HttpCode, HttpStatus, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
+import { Public } from './decorators/auth.decorators';
 import { AuthService } from './auth.service';
 import { createLogger } from '../../common/services/logger.service';
 
 @ApiTags('auth')
 @Controller('auth')
+@SkipThrottle()
 export class AuthValidateController {
   private readonly logger = createLogger('AuthValidateController');
 
   constructor(private readonly authService: AuthService) {}
 
   @Post('validate')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Validate an API key' })
   @ApiHeader({ name: 'X-API-Key', description: 'API key to validate' })

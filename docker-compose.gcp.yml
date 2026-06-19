@@ -1,0 +1,9 @@
+# Google Cloud Compute Engine override.
+# Exposes Traefik on the VM's public interface (port 80) instead of localhost-only.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gcp.yml --profile with-dashboard --profile with-proxy up -d
+
+services:
+  traefik:
+    ports:
+      - '80:80'
+      - '443:443'

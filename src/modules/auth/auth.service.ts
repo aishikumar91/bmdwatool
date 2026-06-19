@@ -136,6 +136,91 @@ export class AuthService implements OnModuleInit {
     return { apiKey: saved, rawKey };
   }
 
+  async getBootstrapKeyStatus(): Promise<{ hasKeys: boolean; hasKeyFile: boolean; hint?: string }> {
+    const count = await this.apiKeyRepository.count();
+    const hasKeyFile = existsSync(API_KEY_FILE);
+    let hint: string | undefined;
+
+    if (count === 0) {
+      hint = 'No API keys yet — click Generate to create your admin key.';
+    } else if (hasKeyFile) {
+      hint = 'An API key file exists on the server (data/.api-key). Generate only if you lost access.';
+    } else {
+      hint = 'Keys exist in the database but no key file was found. Generate a new admin key for login.';
+    }
+
+    return { hasKeys: count > 0, hasKeyFile, hint };
+  }
+
+  /**
+   * Create a fresh admin API key for first-time login or recovery.
+   * When data/.api-key exists and is still valid, returns that key instead of minting a new one.
+   */
+  async generateBootstrapApiKey(options?: { force?: boolean }): Promise<{
+    apiKey: string;
+    keyPrefix: string;
+    created: boolean;
+    recovered: boolean;
+    message: string;
+  }> {
+    if (!options?.force && existsSync(API_KEY_FILE)) {
+      try {
+        const rawKey = readFileSync(API_KEY_FILE, 'utf-8').trim();
+        if (rawKey.length > 0) {
+          try {
+            const keyEntity = await this.validateApiKey(rawKey);
+            if (keyEntity.isActive) {
+              return {
+                apiKey: rawKey,
+                keyPrefix: keyEntity.keyPrefix,
+                created: false,
+                recovered: true,
+                message: 'Recovered your existing API key from the server key file.',
+              };
+            }
+          } catch {
+            this.logger.warn('Stale API key file — will mint a new login key');
+          }
+        }
+      } catch (err) {
+        this.logger.warn('Could not read API key file for recovery', { error: String(err) });
+      }
+    }
+
+    const count = await this.apiKeyRepository.count();
+    const name = count === 0 ? 'Default Admin Key' : 'Login Generated Key';
+
+    const { apiKey, rawKey } = await this.createApiKey({
+      name,
+      role: ApiKeyRole.ADMIN,
+    });
+
+    try {
+      writeFileSync(API_KEY_FILE, rawKey, 'utf-8');
+    } catch (err) {
+      this.logger.warn('Could not write bootstrap API key file', { error: String(err) });
+    }
+
+    const message =
+      count === 0
+        ? 'Admin API key created. Copy it now — it will not be shown again.'
+        : 'New admin API key created. Previous keys remain valid unless revoked.';
+
+    this.logger.log('Bootstrap API key generated from login', {
+      keyId: apiKey.id,
+      keyPrefix: apiKey.keyPrefix,
+      action: 'bootstrap_key_generated',
+    });
+
+    return {
+      apiKey: rawKey,
+      keyPrefix: apiKey.keyPrefix,
+      created: true,
+      recovered: false,
+      message,
+    };
+  }
+
   async findAll(): Promise<ApiKey[]> {
     return this.apiKeyRepository.find({
       order: { createdAt: 'DESC' },

@@ -5,6 +5,12 @@ export function positiveIntFromEnv(name: string, fallback: number): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+export function envFlag(name: string, defaultValue = false): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return defaultValue;
+  return raw === 'true' || raw === '1';
+}
+
 /** Minimum gap between WhatsApp number lookups (getNumberId) per session. */
 export function numberCheckMinDelayMs(): number {
   return positiveIntFromEnv('NUMBER_CHECK_MIN_DELAY_MS', 2500);
@@ -23,4 +29,32 @@ export function bulkMessageDefaultDelayMs(): number {
 /** Max random add-on for bulk message delay (when randomizeDelay is true). */
 export function bulkMessageRandomJitterMs(): number {
   return positiveIntFromEnv('BULK_MESSAGE_RANDOM_JITTER_MS', 4000);
+}
+
+/** Purge stored message / batch history on a schedule (reduces local footprint & ban signals). */
+export function autoClearSessionHistoryEnabled(): boolean {
+  return envFlag('AUTO_CLEAR_SESSION_HISTORY', true);
+}
+
+/** Delete messages and completed batches older than this many hours. */
+export function autoClearMessageRetentionHours(): number {
+  return positiveIntFromEnv('AUTO_CLEAR_MESSAGE_RETENTION_HOURS', 24);
+}
+
+/** How often the cleanup job runs (minutes). */
+export function autoClearIntervalMinutes(): number {
+  return positiveIntFromEnv('AUTO_CLEAR_INTERVAL_MINUTES', 60);
+}
+
+/** Purge a session's DB messages immediately after a bulk broadcast completes. */
+export function autoClearAfterBroadcastEnabled(): boolean {
+  return envFlag('AUTO_CLEAR_AFTER_BROADCAST', true);
+}
+
+/** Allow generating / rotating the bootstrap API key from the login page. */
+export function allowLoginKeyGeneration(): boolean {
+  if (process.env.ALLOW_LOGIN_KEY_GENERATION !== undefined) {
+    return envFlag('ALLOW_LOGIN_KEY_GENERATION');
+  }
+  return process.env.NODE_ENV !== 'production';
 }

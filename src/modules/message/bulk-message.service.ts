@@ -11,6 +11,7 @@ import {
 } from './entities/message-batch.entity';
 import { SendBulkMessageDto } from './dto/bulk-message.dto';
 import { SessionService } from '../session/session.service';
+import { SessionHistoryCleanupService } from './session-history-cleanup.service';
 import { IWhatsAppEngine } from '../../engine/interfaces/whatsapp-engine.interface';
 import { bulkMessageDefaultDelayMs, bulkMessageRandomJitterMs } from '../../config/anti-ban';
 
@@ -33,6 +34,7 @@ export class BulkMessageService implements OnApplicationBootstrap {
     @InjectRepository(MessageBatch, 'data')
     private readonly batchRepository: Repository<MessageBatch>,
     private readonly sessionService: SessionService,
+    private readonly historyCleanup: SessionHistoryCleanupService,
   ) {}
 
   /**
@@ -235,6 +237,10 @@ export class BulkMessageService implements OnApplicationBootstrap {
     batch.completedAt = new Date();
     batch.results = results;
     await this.batchRepository.save(batch);
+
+    if (this.historyCleanup.shouldClearAfterBroadcast()) {
+      void this.historyCleanup.clearSessionMessages(batch.sessionId);
+    }
 
     this.processingBatches.delete(batch.id);
     this.logger.log(`Batch ${batch.batchId} completed: ${batch.progress.sent} sent, ${batch.progress.failed} failed`);

@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "OpenWA",
+    "appName": "BMDWATOOL",
     "appSubtitle": "ממשק WhatsApp API",
     "loading": "טוען...",
     "save": "שמירה",
@@ -62,6 +62,7 @@
     "apiKeys": "מפתחות API",
     "messageTester": "בדיקת הודעות",
     "phoneNumberGenerator": "מחולל מספרים",
+    "verifiedNumbers": "המספרים המאומתים שלי",
     "infrastructure": "תשתית",
     "plugins": "תוספים",
     "logs": "לוגים"

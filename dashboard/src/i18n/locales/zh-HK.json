@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "OpenWA",
+    "appName": "BMDWATOOL",
     "appSubtitle": "WhatsApp API",
     "loading": "正在載入...",
     "save": "儲存",
@@ -62,6 +62,7 @@
     "apiKeys": "API 金鑰",
     "messageTester": "訊息測試器",
     "phoneNumberGenerator": "號碼生成器",
+    "verifiedNumbers": "我的已驗證號碼",
     "infrastructure": "基礎架構",
     "plugins": "外掛",
     "logs": "記錄"

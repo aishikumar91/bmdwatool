@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "OpenWA",
+    "appName": "BMDWATOOL",
     "appSubtitle": "WhatsApp API",
     "loading": "లోడ్ అవుతోంది...",
     "save": "సేవ్ చేయి",
@@ -62,6 +62,7 @@
     "apiKeys": "API కీలు",
     "messageTester": "మెసేజ్ టెస్టర్",
     "phoneNumberGenerator": "నంబర్ జనరేటర్",
+    "verifiedNumbers": "నా ధృవీకరించిన నంబర్లు",
     "infrastructure": "ఇన్‌ఫ్రాస్ట్రక్చర్",
     "plugins": "ప్లగిన్స్",
     "logs": "లాగ్స్"

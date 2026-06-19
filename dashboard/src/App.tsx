@@ -6,7 +6,7 @@ import { Layout } from './components/Layout';
 import { ToastProvider } from './components/Toast';
 import { RoleProvider, useRole, type UserRole } from './hooks/useRole';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { API_BASE_URL } from './services/api';
+import { authBootstrapApi } from './services/api';
 import './App.css';
 
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
@@ -20,6 +20,9 @@ const ApiKeys = lazy(() => import('./pages/ApiKeys').then(m => ({ default: m.Api
 const MessageTester = lazy(() => import('./pages/MessageTester').then(m => ({ default: m.MessageTester })));
 const PhoneNumberGenerator = lazy(() =>
   import('./pages/PhoneNumberGenerator').then(m => ({ default: m.PhoneNumberGenerator })),
+);
+const VerifiedNumbers = lazy(() =>
+  import('./pages/VerifiedNumbers').then(m => ({ default: m.VerifiedNumbers })),
 );
 const Infrastructure = lazy(() => import('./pages/Infrastructure').then(m => ({ default: m.Infrastructure })));
 const Plugins = lazy(() => import('./pages/Plugins'));
@@ -53,18 +56,12 @@ function AppContent() {
     setApiKey(key);
     sessionStorage.setItem('openwa_api_key', key);
 
-    // Fetch the role from API
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/validate`, {
-        method: 'POST',
-        headers: { 'X-API-Key': key },
-      });
-      if (response.ok) {
-        const data = await response.json();
+      const data = await authBootstrapApi.validate(key);
+      if (data.valid && data.role) {
         setRole(data.role as UserRole);
       }
     } catch {
-      // Default to viewer if we can't fetch role
       setRole('viewer');
     }
 
@@ -82,11 +79,8 @@ function AppContent() {
   useEffect(() => {
     if (!savedKey) return;
 
-    fetch(`${API_BASE_URL}/auth/validate`, {
-      method: 'POST',
-      headers: { 'X-API-Key': savedKey },
-    })
-      .then(res => res.json())
+    authBootstrapApi
+      .validate(savedKey)
       .then(data => {
         if (data.valid && data.role) {
           setRole(data.role as UserRole);
@@ -122,6 +116,7 @@ function AppContent() {
             <Route path="logs" element={<Logs />} />
             <Route path="message-tester" element={<MessageTester />} />
             <Route path="number-generator" element={<PhoneNumberGenerator />} />
+            <Route path="verified-numbers" element={<VerifiedNumbers />} />
             <Route path="infrastructure" element={<Infrastructure />} />
             {role === 'admin' && <Route path="plugins" element={<Plugins />} />}
             <Route path="*" element={<Navigate to="/" replace />} />

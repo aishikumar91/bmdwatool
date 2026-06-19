@@ -24,28 +24,17 @@
 
 .sidebar-header {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  padding: 1.25rem 1.5rem;
   border-bottom: 1px solid var(--border);
   min-height: 72px;
 }
 
 .sidebar.collapsed .sidebar-header {
-  justify-content: center;
-  padding: 1.5rem 1rem;
-}
-
-.sidebar-logo {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.mobile-brand .sidebar-logo {
-  width: 24px;
-  height: 24px;
+  align-items: center;
+  padding: 1.25rem 0.75rem;
 }
 
 .sidebar-brand {
@@ -53,21 +42,16 @@
   flex-direction: column;
   overflow: hidden;
   white-space: nowrap;
-}
-
-.brand-name {
-  font-size: 1.125rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
+  width: 100%;
 }
 
 .brand-subtitle {
-  font-size: 0.7rem;
-  font-weight: 500;
+  font-size: 0.65rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
+  width: 100%;
 }
 
 /* Collapse Toggle Button - Circular design at edge */
@@ -346,11 +330,8 @@
   .mobile-brand {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-  }
-
-  .mobile-brand .brand-name {
-    font-size: 1rem;
+    justify-content: center;
+    flex: 1;
   }
 
   .sidebar.mobile {

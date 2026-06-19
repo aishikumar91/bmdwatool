@@ -5,13 +5,14 @@ import { ApiKey } from './entities/api-key.entity';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { AuthValidateController } from './auth-validate.controller';
+import { AuthBootstrapController } from './auth-bootstrap.controller';
 import { ApiKeyGuard } from './guards/api-key.guard';
 import { ProxyAwareThrottlerGuard } from '../../common/security/proxy-aware-throttler.guard';
 
 @Global()
 @Module({
   imports: [TypeOrmModule.forFeature([ApiKey], 'main')],
-  controllers: [AuthController, AuthValidateController],
+  controllers: [AuthController, AuthValidateController, AuthBootstrapController],
   providers: [
     AuthService,
     {
