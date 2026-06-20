@@ -99,6 +99,7 @@ ensure_env_file() {
   set_env_var AUTO_CLEAR_AFTER_BROADCAST true "$env_file"
   set_env_var PUPPETEER_HEADLESS true "$env_file"
   set_env_var PUPPETEER_ARGS '--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu' "$env_file"
+  set_env_var WWEBJS_WEB_VERSION 2.3000.1023204257 "$env_file"
 
   local ip
   ip="$(gcp_external_ip)"
@@ -127,6 +128,20 @@ compose_profiles() {
     profiles+=(--profile minio)
   fi
   echo "${profiles[@]}"
+}
+
+ensure_swap() {
+  if swapon --show | grep -q '/swapfile'; then
+    log_ok "Swap already enabled"
+    return
+  fi
+  log_info "Adding 2G swap (recommended for e2-micro / 1GB RAM)..."
+  fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=progress
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >>/etc/fstab
+  log_ok "Swap enabled"
 }
 
 install_docker() {
@@ -198,6 +213,7 @@ cmd_install() {
   apt-get update -qq
   apt-get install -y curl git ca-certificates
   install_docker
+  ensure_swap
   clone_or_update_repo
   ensure_env_file "$INSTALL_DIR"
   setup_gcp_firewall
