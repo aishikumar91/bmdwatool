@@ -157,22 +157,65 @@ install_docker() {
     return
   fi
 
-  log_info "Installing Docker..."
-  apt-get update -qq
-  apt-get install -y ca-certificates curl gnupg
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  chmod a+r /etc/apt/keyrings/docker.gpg
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  local os_id="${ID:-linux}"
+  local codename="${VERSION_CODENAME:-${UBUNTU_CODENAME:-bookworm}}"
 
-  local codename
-  codename="$(. /etc/os-release && echo "${VERSION_CODENAME:-$UBUNTU_CODENAME}")"
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${codename} stable" \
-    >/etc/apt/sources.list.d/docker.list
+  log_info "Installing Docker (${os_id} ${codename})..."
+
+  # Remove a broken list from a prior run (e.g. ubuntu+trixie on Debian GCP images).
+  rm -f /etc/apt/sources.list.d/docker.list
 
   apt-get update -qq
-  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin git
+  apt-get install -y ca-certificates curl gnupg git
+
+  install_docker_ce() {
+    local distro="$1"
+    local suite="$2"
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL "https://download.docker.com/linux/${distro}/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${distro} ${suite} stable" \
+      >/etc/apt/sources.list.d/docker.list
+    apt-get update -qq
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  }
+
+  install_docker_distro() {
+    if [[ "$os_id" == "ubuntu" ]]; then
+      install_docker_ce ubuntu "$codename"
+    elif [[ "$os_id" == "debian" ]]; then
+      # Docker CE often lags new Debian releases (e.g. trixie) — use bookworm repo.
+      local docker_suite="$codename"
+      case "$codename" in
+        trixie | sid | testing | unstable)
+          docker_suite="bookworm"
+          log_warn "Debian ${codename}: Docker CE uses bookworm packages"
+          ;;
+      esac
+      install_docker_ce debian "$docker_suite"
+    else
+      return 1
+    fi
+  }
+
+  install_docker_distro_packages() {
+    log_warn "Docker CE unavailable — installing docker.io from distro repos"
+    apt-get install -y docker.io docker-compose-plugin
+  }
+
+  if install_docker_distro; then
+    log_ok "Docker CE installed"
+  elif install_docker_distro_packages; then
+    log_ok "docker.io installed"
+  else
+    log_err "Could not install Docker. Install manually then re-run: $0 deploy"
+    exit 1
+  fi
+
   systemctl enable --now docker
-  log_ok "Docker installed"
+  log_ok "Docker ready: $(docker --version)"
 }
 
 setup_gcp_firewall() {
