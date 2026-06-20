@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 # BMDWATOOL — deploy on Google Cloud Compute Engine (Ubuntu/Debian VM)
 #
-# First-time VM bootstrap (run as root or with sudo on a fresh GCP instance):
-#   curl -fsSL https://raw.githubusercontent.com/aishikumar91/bmdwatool/main/scripts/deploy-gcp-vm.sh | sudo bash -s install
+# First-time VM bootstrap (repo must be reachable via git — curl/raw URLs fail on private repos):
+#   sudo apt-get update && sudo apt-get install -y git
+#   sudo git clone https://github.com/aishikumar91/bmdwatool.git /opt/bmdwatool
+#   cd /opt/bmdwatool && sudo bash scripts/deploy-gcp-vm.sh install
+#   sudo bash scripts/deploy-gcp-vm.sh deploy
+#
+# Private repo: use a GitHub PAT (repo scope):
+#   export GITHUB_TOKEN=ghp_xxxxxxxx
+#   sudo git clone "https://${GITHUB_TOKEN}@github.com/aishikumar91/bmdwatool.git" /opt/bmdwatool
 #
 # From an existing clone on the VM:
 #   sudo ./scripts/deploy-gcp-vm.sh install   # once
