@@ -284,31 +284,88 @@ cmd_deploy() {
   local dir
   dir="$(project_dir)"
   cd "$dir"
+  local force_build="${1:-}"
 
   ensure_env_file "$dir"
   local profiles
   profiles="$(compose_profiles "$dir")"
 
-  log_info "Building images..."
-  # shellcheck disable=SC2086
-  "${COMPOSE[@]}" $profiles build
+  export DOCKER_BUILDKIT=1
+  export COMPOSE_DOCKER_CLI_BUILD=1
+
+  local api_image
+  api_image="$(docker images -q bmdwatool-openwa-api 2>/dev/null || docker images -q "${dir##*/}-openwa-api" 2>/dev/null || true)"
+
+  if [[ "$force_build" == "--build" || -z "$api_image" ]]; then
+    log_info "Building images (first build on e2-micro often takes 20–45 min — this is normal)..."
+    log_info "Watch progress: docker compose -f docker-compose.yml -f docker-compose.gcp.yml build --progress=plain"
+    # shellcheck disable=SC2086
+    "${COMPOSE[@]}" $profiles build
+  else
+    log_ok "Using existing Docker images (skip rebuild). Run: $0 deploy --build to rebuild"
+  fi
 
   log_info "Starting BMDWATOOL..."
   # shellcheck disable=SC2086
   "${COMPOSE[@]}" $profiles up -d
 
+  print_deploy_urls traefik
+}
+
+# Lighter stack for 1 GB VMs: API + dashboard only (no Traefik build), ports 2785 + 2886.
+cmd_quick() {
+  require_linux
+  local dir
+  dir="$(project_dir)"
+  cd "$dir"
+  local force_build="${1:-}"
+
+  ensure_env_file "$dir"
+  set_env_var BIND_HOST 0.0.0.0 "$dir/.env"
+  set_env_var OPENWA_MEM_LIMIT 768m "$dir/.env"
+  set_env_var DASHBOARD_ENABLED false "$dir/.env"
+  set_env_var PROXY_ENABLED false "$dir/.env"
+
+  export DOCKER_BUILDKIT=1
+  export COMPOSE_DOCKER_CLI_BUILD=1
+
+  log_warn "Quick mode: API :2785 + dashboard :2886 (no Traefik). Recommended for e2-micro."
+
+  if [[ "$force_build" == "--build" ]] || ! docker compose -f docker-compose.dev.yml images -q openwa 2>/dev/null | grep -q .; then
+    log_info "Building quick stack (first build on 1 GB RAM: ~15–30 min)..."
+    docker compose -f docker-compose.dev.yml build --progress=plain
+  else
+    log_ok "Using cached images (quick). Run: $0 quick --build to rebuild"
+  fi
+
+  docker compose -f docker-compose.dev.yml up -d
+
+  print_deploy_urls quick
+}
+
+print_deploy_urls() {
+  local mode="${1:-traefik}"
   local ip
   ip="$(gcp_external_ip)"
   echo ""
   log_ok "BMDWATOOL is running."
-  if [[ -n "$ip" ]]; then
+  if [[ "$mode" == "quick" ]]; then
+    if [[ -n "$ip" ]]; then
+      log_ok "Dashboard: http://${ip}:2886/"
+      log_ok "API health: http://${ip}:2785/api/infra/health"
+      log_info "Open GCP firewall for TCP 2785 and 2886"
+    else
+      log_ok "Dashboard: http://<VM-IP>:2886/"
+      log_ok "API: http://<VM-IP>:2785/"
+    fi
+  elif [[ -n "$ip" ]]; then
     log_ok "Dashboard: http://${ip}/"
     log_ok "API health: http://${ip}/api/infra/health"
   else
     log_ok "Dashboard: http://<VM-EXTERNAL-IP>/"
   fi
   log_info "View logs: $0 logs"
-  log_info "API key file (inside container volume): data/.api-key — use Recover API Key on login"
+  log_info "API key: use Recover API Key on login (data/.api-key in volume)"
 }
 
 cmd_update() {
@@ -367,12 +424,18 @@ Usage: $0 <command>
 
 Commands:
   install   One-time VM setup (Docker, clone repo, firewall rule, .env)
-  deploy    Build and start containers (Traefik on port 80)
+  deploy    Build and start full stack (Traefik on port 80)
+  quick     Faster 1 GB VM setup — API :2785 + dashboard :2886 (skip Traefik)
   update    git pull + deploy
   status    Show container status
   logs      Tail logs (default service: openwa-api)
   stop      Stop all containers
   help      Show this help
+
+Tips:
+  First Docker build on e2-micro (1 GB RAM) often takes 20–45 minutes.
+  Add --build to force rebuild. Without it, deploy reuses existing images.
+  Upgrade VM to e2-medium (4 GB) for much faster builds.
 
 Environment:
   REPO_URL=$REPO_URL
@@ -386,7 +449,8 @@ EOF
 main() {
   case "${1:-help}" in
     install) cmd_install ;;
-    deploy) cmd_deploy ;;
+    deploy) cmd_deploy "${2:-}" ;;
+    quick) cmd_quick "${2:-}" ;;
     update) cmd_update ;;
     status) cmd_status ;;
     logs) cmd_logs "${2:-}" ;;
